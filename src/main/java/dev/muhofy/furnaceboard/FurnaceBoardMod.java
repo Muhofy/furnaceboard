@@ -23,7 +23,6 @@ public class FurnaceBoardMod implements ClientModInitializer {
 
         FurnaceBoardKeybinds.register();
         FurnaceTrackerManager.init();
-        // Phase 4: FurnaceNotifier.init()
         // Phase 5: FurnaceBoardHudWidget.register()
         // Phase 6: FurnaceBoardConfig.init()
 

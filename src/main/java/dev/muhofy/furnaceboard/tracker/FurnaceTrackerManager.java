@@ -5,6 +5,7 @@ import dev.muhofy.furnaceboard.data.FurnaceRecord;
 import dev.muhofy.furnaceboard.data.FurnaceState;
 import dev.muhofy.furnaceboard.mixin.AbstractFurnaceBlockEntityAccessor;
 import dev.muhofy.furnaceboard.mixin.AbstractFurnaceScreenHandlerAccessor;
+import dev.muhofy.furnaceboard.notification.FurnaceNotifier;
 import dev.muhofy.furnaceboard.util.FurnaceBoardLogger;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
@@ -15,6 +16,7 @@ import net.minecraft.client.world.ClientWorld;
 import net.minecraft.inventory.Inventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.RegistryKey;
+import net.minecraft.screen.AbstractFurnaceScreenHandler;
 import net.minecraft.screen.AbstractFurnaceScreenHandler;
 import net.minecraft.screen.PropertyDelegate;
 import net.minecraft.util.Identifier;
@@ -158,7 +160,7 @@ public final class FurnaceTrackerManager {
                 if (newRecord.state == FurnaceState.DONE && oldState != FurnaceState.DONE) {
                     if (!notifiedDone.contains(pos)) {
                         notifiedDone.add(pos);
-                        // Phase 4: FurnaceNotifier.onFurnaceDone(newRecord);
+                        FurnaceNotifier.onFurnaceDone(newRecord);
                         FurnaceBoardLogger.info("Furnace DONE at " + pos);
                     }
                 } else if (newRecord.state != FurnaceState.DONE) {
