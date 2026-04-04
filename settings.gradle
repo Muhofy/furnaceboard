@@ -1,0 +1,9 @@
+pluginManagement {
+    repositories {
+        // Fabric Maven — required for fabric-loom, including 1.14-SNAPSHOT
+        maven { url = "https://maven.fabricmc.net/" }
+        gradlePluginPortal()
+    }
+}
+
+rootProject.name = "furnaceboard"
