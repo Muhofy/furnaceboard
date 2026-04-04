@@ -1,11 +1,14 @@
 package dev.muhofy.furnaceboard;
 
 import dev.muhofy.furnaceboard.tracker.FurnaceTrackerManager;
+import dev.muhofy.furnaceboard.ui.FurnaceBoardHudWidget;
+import dev.muhofy.furnaceboard.ui.FurnaceBoardScreen;
 import dev.muhofy.furnaceboard.util.FurnaceBoardKeybinds;
 import dev.muhofy.furnaceboard.util.FurnaceBoardLogger;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
+import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
 /**
  * FurnaceBoard — client-side entry point.
@@ -23,7 +26,17 @@ public class FurnaceBoardMod implements ClientModInitializer {
 
         FurnaceBoardKeybinds.register();
         FurnaceTrackerManager.init();
-        // Phase 5: FurnaceBoardHudWidget.register()
+        FurnaceBoardHudWidget.register();
+
+        // Keybind tick — open dashboard when F is pressed and no screen is open
+        ClientTickEvents.END_CLIENT_TICK.register(client -> {
+            if (FurnaceBoardKeybinds.openDashboard.wasPressed()) {
+                if (client.currentScreen == null) {
+                    client.setScreen(new FurnaceBoardScreen());
+                }
+            }
+        });
+
         // Phase 6: FurnaceBoardConfig.init()
 
         FurnaceBoardLogger.info("FurnaceBoard initialized.");
