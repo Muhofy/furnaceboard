@@ -21,6 +21,10 @@
     ]
   },
 
+  "mixins": [
+    "furnaceboard.mixins.json"
+  ],
+
   "depends": {
     "fabricloader": ">=0.18.1",
     "fabric-api": ">=0.140.2+1.21.11",

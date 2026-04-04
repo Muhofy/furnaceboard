@@ -1,5 +1,7 @@
 package dev.muhofy.furnaceboard;
 
+import dev.muhofy.furnaceboard.tracker.FurnaceTrackerManager;
+import dev.muhofy.furnaceboard.util.FurnaceBoardKeybinds;
 import dev.muhofy.furnaceboard.util.FurnaceBoardLogger;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.api.EnvType;
@@ -19,8 +21,8 @@ public class FurnaceBoardMod implements ClientModInitializer {
     public void onInitializeClient() {
         FurnaceBoardLogger.info("FurnaceBoard initializing...");
 
-        // Phase 3: FurnaceTrackerManager.init()
-        // Phase 3: FurnaceBoardKeybinds.register()
+        FurnaceBoardKeybinds.register();
+        FurnaceTrackerManager.init();
         // Phase 4: FurnaceNotifier.init()
         // Phase 5: FurnaceBoardHudWidget.register()
         // Phase 6: FurnaceBoardConfig.init()

@@ -1,14 +1,12 @@
 {
-	"required": true,
-	"package": "dev.muhofy.furnaceboard.mixin",
-	"compatibilityLevel": "JAVA_21",
-	"mixins": [
-		"ExampleMixin"
-	],
-	"injectors": {
-		"defaultRequire": 1
-	},
-	"overwrites": {
-		"requireAnnotations": true
-	}
+  "required": true,
+  "package": "dev.muhofy.furnaceboard.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "AbstractFurnaceScreenHandlerAccessor",
+    "AbstractFurnaceBlockEntityAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
 }
