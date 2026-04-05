@@ -10,11 +10,6 @@ import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 
-/**
- * FurnaceBoard — client-side entry point.
- * Registers all systems on mod init.
- * All logic is client-only; no server-side code in v1.
- */
 @Environment(EnvType.CLIENT)
 public class FurnaceBoardMod implements ClientModInitializer {
 
@@ -28,7 +23,7 @@ public class FurnaceBoardMod implements ClientModInitializer {
         FurnaceTrackerManager.init();
         FurnaceBoardHudWidget.register();
 
-        // Keybind tick — open dashboard when F is pressed and no screen is open
+        // Keybind — open dashboard
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (FurnaceBoardKeybinds.openDashboard.wasPressed()) {
                 if (client.currentScreen == null) {
@@ -36,8 +31,6 @@ public class FurnaceBoardMod implements ClientModInitializer {
                 }
             }
         });
-
-        // Phase 6: FurnaceBoardConfig.init()
 
         FurnaceBoardLogger.info("FurnaceBoard initialized.");
     }

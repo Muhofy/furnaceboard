@@ -5,7 +5,8 @@
   "client": [
     "AbstractFurnaceScreenHandlerAccessor",
     "AbstractFurnaceScreenHandlerWorldAccessor",
-    "AbstractFurnaceBlockEntityAccessor"
+    "AbstractFurnaceBlockEntityAccessor",
+    "AbstractFurnaceScreenMixin"
   ],
   "injectors": {
     "defaultRequire": 1
