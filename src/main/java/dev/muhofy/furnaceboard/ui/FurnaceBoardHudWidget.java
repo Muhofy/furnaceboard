@@ -5,6 +5,7 @@ import dev.muhofy.furnaceboard.data.FurnaceState;
 import dev.muhofy.furnaceboard.tracker.FurnaceTrackerManager;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
+//import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.util.Identifier;
@@ -16,33 +17,16 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Compact HUD overlay — always visible in the corner of the screen (toggleable).
- *
- * Layout:
- *   🔥 3 furnaces
- *   ⏱ Next: 1:24
- *
- * Colors per state (from SYSINSTRUCTIONS):
- *   Smelting : #55FF55 (green)
- *   Done     : #FFAA00 (gold)
- *   No fuel  : #FF5555 (red)
- *   Empty    : #AAAAAA (gray)
- *
- * Registered via HudElementRegistry (Fabric API 0.141.3+1.21.11).
- * HudElement.render uses Mojang names (GuiGraphics, DeltaTracker) in the interface,
- * but Loom remaps them to Yarn names (DrawContext, RenderTickCounter) at compile time.
- * We use Yarn names here — Loom handles the bridge.
+ * Compact HUD overlay — bottom-right corner, semi-transparent background.
  */
 public final class FurnaceBoardHudWidget {
 
     private static final Identifier HUD_ID = Identifier.of("furnaceboard", "hud");
 
-    // UI layout constants
-    private static final int PADDING_X   = 4;
-    private static final int PADDING_Y   = 4;
-    private static final int LINE_HEIGHT = 10;
+    private static final int PADDING     = 5;
+    private static final int LINE_HEIGHT = 11;
+    private static final int BG_COLOR    = 0x88000000; // semi-transparent black
 
-    // State colors (ARGB)
     private static final int COLOR_WHITE    = 0xFFFFFFFF;
     private static final int COLOR_SMELTING = 0xFF55FF55;
     private static final int COLOR_DONE     = 0xFFFFAA00;
@@ -52,14 +36,6 @@ public final class FurnaceBoardHudWidget {
 
     private FurnaceBoardHudWidget() {}
 
-    // -------------------------------------------------------------------------
-    // Registration
-    // -------------------------------------------------------------------------
-
-    /**
-     * Registers the HUD layer after MISC_OVERLAYS.
-     * VanillaHudElements.MISC_OVERLAYS verified in fabric-api-0.141.3+1.21.11.
-     */
     public static void register() {
         HudElementRegistry.attachElementAfter(
                 VanillaHudElements.MISC_OVERLAYS,
@@ -68,19 +44,14 @@ public final class FurnaceBoardHudWidget {
         );
     }
 
-    public static void setVisible(boolean v) { visible = v; }
-    public static boolean isVisible() { return visible; }
     public static void toggle() { visible = !visible; }
-
-    // -------------------------------------------------------------------------
-    // Render — uses Yarn types (DrawContext), Loom remaps at compile time
-    // -------------------------------------------------------------------------
+    public static boolean isVisible() { return visible; }
+    public static void setVisible(boolean v) { visible = v; }
 
     private static void render(DrawContext context) {
         MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.player == null) return;
-        if (client.options.hudHidden) return;
-        if (!visible) return;
+        if (client.options.hudHidden || !visible) return;
         if (client.currentScreen != null) return;
 
         Map<BlockPos, FurnaceRecord> all = FurnaceTrackerManager.getWorldData().getAll();
@@ -98,40 +69,44 @@ public final class FurnaceBoardHudWidget {
         else if (smeltCount > 0)  headerColor = COLOR_SMELTING;
         else                      headerColor = COLOR_WHITE;
 
-        int x = PADDING_X;
-        int y = PADDING_Y;
-
-        // Line 1: furnace count
+        // Build lines
         String line1 = "\uD83D\uDD25 " + records.size() + " furnace" + (records.size() != 1 ? "s" : "");
-        context.drawTextWithShadow(client.textRenderer, line1, x, y, headerColor);
-        y += LINE_HEIGHT;
+        String line2 = null;
 
-        // Line 2: next ETA or status
         Optional<FurnaceRecord> nextSmelting = records.stream()
                 .filter(r -> r.state == FurnaceState.SMELTING && r.getEtaSeconds() > 0)
                 .min(Comparator.comparingInt(FurnaceRecord::getEtaSeconds));
 
         if (doneCount > 0) {
-            context.drawTextWithShadow(client.textRenderer,
-                    "\u2705 " + doneCount + " done!", x, y, COLOR_DONE);
+            line2 = "\u2705 " + doneCount + " done!";
         } else if (nextSmelting.isPresent()) {
-            String eta = formatEta(nextSmelting.get().getEtaSeconds());
-            context.drawTextWithShadow(client.textRenderer,
-                    "\u23F1 Next: " + eta, x, y, COLOR_WHITE);
+            line2 = "\u23F1 Next: " + formatEta(nextSmelting.get().getEtaSeconds());
         } else if (noFuelCount > 0) {
-            context.drawTextWithShadow(client.textRenderer,
-                    "\u274C " + noFuelCount + " no fuel", x, y, COLOR_NO_FUEL);
+            line2 = "\u274C " + noFuelCount + " no fuel";
+        }
+
+        int lineCount = line2 != null ? 2 : 1;
+        int boxW = 90;
+        int boxH = PADDING * 2 + LINE_HEIGHT * lineCount;
+
+        // Bottom-right position with margin
+        int screenW = context.getScaledWindowWidth();
+        int screenH = context.getScaledWindowHeight();
+        int boxX = screenW - boxW - 8;
+        int boxY = screenH - boxH - 48; // above hotbar
+
+        // Background
+        context.fill(boxX - PADDING, boxY - PADDING, boxX + boxW, boxY + boxH, BG_COLOR);
+
+        // Text
+        context.drawTextWithShadow(client.textRenderer, line1, boxX, boxY, headerColor);
+        if (line2 != null) {
+            int line2color = doneCount > 0 ? COLOR_DONE : noFuelCount > 0 ? COLOR_NO_FUEL : COLOR_WHITE;
+            context.drawTextWithShadow(client.textRenderer, line2, boxX, boxY + LINE_HEIGHT, line2color);
         }
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
-
-    /** Formats seconds as MM:SS string. */
-    static String formatEta(int seconds) {
-        int m = seconds / 60;
-        int s = seconds % 60;
-        return String.format("%d:%02d", m, s);
+    public static String formatEta(int seconds) {
+        return String.format("%d:%02d", seconds / 60, seconds % 60);
     }
 }

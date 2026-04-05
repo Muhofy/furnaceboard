@@ -52,7 +52,23 @@ public final class FurnaceTrackerManager {
     @Nullable
     private static BlockPos openFurnacePos = null;
 
-    private FurnaceTrackerManager() {}
+    /** Manually excluded furnace positions — user pressed "Remove" in screen. */
+    private static final Set<BlockPos> excluded = new HashSet<>();
+
+    public static void excludeFurnace(BlockPos pos) {
+        excluded.add(pos);
+        worldData.remove(pos);
+        worldData.save();
+        FurnaceBoardLogger.info("Furnace excluded at " + pos);
+    }
+
+    public static boolean isExcluded(BlockPos pos) {
+        return excluded.contains(pos);
+    }
+
+    public static void clearExclusion(BlockPos pos) {
+        excluded.remove(pos);
+    }
 
     // -------------------------------------------------------------------------
     // Init
@@ -107,19 +123,25 @@ public final class FurnaceTrackerManager {
                     }
 
                     FurnaceBoardLogger.info("Found furnace at " + pos);
+                    // If previously excluded, clear exclusion — player opened it again intentionally
+                    clearExclusion(pos);
                     openHandler = handler;
                     openFurnacePos = pos;
-                    recordFromHandler(handler, pos, client.world.getRegistryKey());
+                    // Don't record immediately — handler not yet synced on first tick
+                    // Next tick will pick it up via the openHandler update loop
 
-                } else {
-                    // Screen closed
-                    openHandler = null;
-                    openFurnacePos = null;
+                } else if (!(currentScreen instanceof AbstractFurnaceScreen<?>)) {
+                    // Any non-furnace screen (including FurnaceBoardScreen, null) — keep handler alive
+                    // Only clear when player explicitly closes all screens
+                    if (currentScreen == null) {
+                        openHandler = null;
+                        openFurnacePos = null;
+                    }
                 }
             }
 
-            // --- Update open furnace every tick while screen is open ---
-            if (openHandler != null && openFurnacePos != null && currentScreen instanceof AbstractFurnaceScreen<?>) {
+            // --- Update open furnace every tick (regardless of current screen) ---
+            if (openHandler != null && openFurnacePos != null && !isExcluded(openFurnacePos)) {
                 recordFromHandler(openHandler, openFurnacePos, client.world.getRegistryKey());
             }
 
