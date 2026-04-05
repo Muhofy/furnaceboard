@@ -1,0 +1,21 @@
+{
+  "modmenu.nameTranslation.furnaceboard": "FurnaceBoard",
+  "modmenu.descriptionTranslation.furnaceboard": "Track all your furnaces at a glance. Get notified when smelting is done.",
+
+  "key.category.furnaceboard": "FurnaceBoard",
+  "key.furnaceboard.open_dashboard": "Open FurnaceBoard",
+
+  "screen.furnaceboard.title": "FurnaceBoard",
+
+  "button.furnaceboard.toggle_hud": "Toggle HUD",
+  "button.furnaceboard.close": "Close",
+
+  "label.furnaceboard.empty": "Empty",
+  "label.furnaceboard.no_fuel": "No Fuel",
+  "label.furnaceboard.done": "Done",
+  "label.furnaceboard.smelting": "Smelting",
+
+  "toast.furnaceboard.done.title": "%s finished!",
+  "toast.furnaceboard.done.title.unknown": "Furnace finished!",
+  "toast.furnaceboard.done.body": "at %d, %d, %d"
+}
