@@ -283,7 +283,7 @@ public final class FurnaceTrackerManager {
             ItemStack input, ItemStack output,
             int burnTime, int cookTime, int cookTimeTotal
     ) {
-        if (!output.isEmpty()) return FurnaceState.DONE;
+        if (input.isEmpty() && !output.isEmpty()) return FurnaceState.DONE; // nothing left to smelt
         if (input.isEmpty())   return FurnaceState.EMPTY;
         if (burnTime > 0)      return FurnaceState.SMELTING;
         return FurnaceState.NO_FUEL;
