@@ -4,6 +4,7 @@
   "compatibilityLevel": "JAVA_21",
   "client": [
     "AbstractFurnaceScreenHandlerAccessor",
+    "AbstractFurnaceScreenHandlerWorldAccessor",
     "AbstractFurnaceBlockEntityAccessor"
   ],
   "injectors": {

@@ -31,6 +31,6 @@ public final class FurnaceBoardLogger {
     }
 
     public static void debug(String message) {
-        LOGGER.debug("[FurnaceBoard] {}", message);
+        LOGGER.info("[FurnaceBoard] {}", message);
     }
 }

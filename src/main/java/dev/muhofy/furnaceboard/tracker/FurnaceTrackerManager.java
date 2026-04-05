@@ -5,20 +5,20 @@ import dev.muhofy.furnaceboard.data.FurnaceRecord;
 import dev.muhofy.furnaceboard.data.FurnaceState;
 import dev.muhofy.furnaceboard.mixin.AbstractFurnaceBlockEntityAccessor;
 import dev.muhofy.furnaceboard.mixin.AbstractFurnaceScreenHandlerAccessor;
+import dev.muhofy.furnaceboard.mixin.AbstractFurnaceScreenHandlerWorldAccessor;
 import dev.muhofy.furnaceboard.notification.FurnaceNotifier;
 import dev.muhofy.furnaceboard.util.FurnaceBoardLogger;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.minecraft.block.entity.AbstractFurnaceBlockEntity;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.screen.ingame.AbstractFurnaceScreen;
 import net.minecraft.client.world.ClientWorld;
-import net.minecraft.inventory.Inventory;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.RegistryKey;
 import net.minecraft.screen.AbstractFurnaceScreenHandler;
-import net.minecraft.screen.AbstractFurnaceScreenHandler;
 import net.minecraft.screen.PropertyDelegate;
+import net.minecraft.world.World;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
@@ -32,23 +32,24 @@ import java.util.Set;
  * Core tracking system for FurnaceBoard.
  *
  * Responsibilities:
- *   - On furnace screen open: read BlockPos + state, create/update FurnaceRecord
+ *   - Detects furnace screen open via tick-based currentScreen check
+ *     (ScreenEvents.AFTER_INIT was not firing in 1.21.11 — replaced with tick polling)
  *   - Every 20 ticks: recalculate ETA for all tracked furnaces
- *   - Detect DONE transitions → fire FurnaceNotifier (Phase 4)
+ *   - Detect DONE transitions → fire FurnaceNotifier
  *   - Persist changes to FurnaceBoardWorldData
  *
  * All logic runs on the client thread only.
  */
 public final class FurnaceTrackerManager {
 
-    /** Recalculate ETA every 20 ticks (1 second). */
     private static final int TICK_INTERVAL = 20;
 
     private static final FurnaceBoardWorldData worldData = new FurnaceBoardWorldData();
     private static int tickCounter = 0;
-
-    /** Positions that were DONE on the last tick — used to fire notifications only once. */
     private static final Set<BlockPos> notifiedDone = new HashSet<>();
+
+    /** Used to detect screen change each tick. */
+    private static Screen lastScreen = null;
 
     private FurnaceTrackerManager() {}
 
@@ -57,7 +58,6 @@ public final class FurnaceTrackerManager {
     // -------------------------------------------------------------------------
 
     public static void init() {
-        registerScreenEvent();
         registerTickEvent();
         FurnaceBoardLogger.info("FurnaceTrackerManager initialized.");
     }
@@ -70,23 +70,12 @@ public final class FurnaceTrackerManager {
     // World lifecycle
     // -------------------------------------------------------------------------
 
-    /**
-     * Call when the player joins a world.
-     * Loads saved furnace data from furnaceboard.dat.
-     *
-     * @param worldSaveDir path to .minecraft/saves/<world>/
-     * @param staleDays    stale record pruning threshold
-     */
     public static void onWorldJoin(java.nio.file.Path worldSaveDir, int staleDays) {
         worldData.init(worldSaveDir, staleDays);
         notifiedDone.clear();
         FurnaceBoardLogger.info("World data loaded. Tracking " + worldData.size() + " furnace(s).");
     }
 
-    /**
-     * Call when the player leaves a world.
-     * Saves current state to disk.
-     */
     public static void onWorldLeave() {
         worldData.save();
         notifiedDone.clear();
@@ -94,43 +83,59 @@ public final class FurnaceTrackerManager {
     }
 
     // -------------------------------------------------------------------------
-    // Screen event — record furnace on open
-    // -------------------------------------------------------------------------
-
-    private static void registerScreenEvent() {
-        ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
-            if (!(screen instanceof AbstractFurnaceScreen<?>)) return;
-
-            AbstractFurnaceScreen<?> furnaceScreen = (AbstractFurnaceScreen<?>) screen;
-            // getScreenHandler() is from ScreenHandlerProvider<T>, returns T (AbstractFurnaceScreenHandler)
-            AbstractFurnaceScreenHandler handler = (AbstractFurnaceScreenHandler) furnaceScreen.getScreenHandler();
-
-            // Use Mixin accessor to get the backing inventory
-            Inventory inventory = ((AbstractFurnaceScreenHandlerAccessor) handler).getInventory();
-
-            if (!(inventory instanceof AbstractFurnaceBlockEntity furnaceBE)) {
-                // Client-side dummy inventory — BlockPos not available, skip
-                FurnaceBoardLogger.debug("Furnace screen opened but inventory is not AbstractFurnaceBlockEntity — skipping.");
-                return;
-            }
-
-            BlockPos pos = furnaceBE.getPos();
-            ClientWorld world = client.world;
-            if (world == null) return;
-
-            RegistryKey<World> dimension = world.getRegistryKey();
-            recordFurnace(furnaceBE, pos, dimension);
-        });
-    }
-
-    // -------------------------------------------------------------------------
-    // Tick event — recalculate ETA every 20 ticks
+    // Tick event
     // -------------------------------------------------------------------------
 
     private static void registerTickEvent() {
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.world == null || client.player == null) return;
 
+            // --- Screen change detection (replaces ScreenEvents.AFTER_INIT) ---
+            Screen currentScreen = client.currentScreen;
+            if (currentScreen != lastScreen) {
+                lastScreen = currentScreen;
+                if (currentScreen instanceof AbstractFurnaceScreen<?> furnaceScreen) {
+                    FurnaceBoardLogger.info("Furnace screen detected!");
+                    AbstractFurnaceScreenHandler handler =
+                            (AbstractFurnaceScreenHandler) furnaceScreen.getScreenHandler();
+
+                    // Get world from handler via Mixin accessor — works in production
+                    World handlerWorld = ((AbstractFurnaceScreenHandlerWorldAccessor) handler).getWorld();
+                    if (handlerWorld == null || client.player == null) return;
+
+                    // Scan blocks around the player to find the furnace block entity
+                    // Player must be within 5 blocks of the furnace to open it
+                    BlockPos playerPos = client.player.getBlockPos();
+                    BlockPos foundPos = null;
+
+                    outer:
+                    for (int dx = -5; dx <= 5; dx++) {
+                        for (int dy = -5; dy <= 5; dy++) {
+                            for (int dz = -5; dz <= 5; dz++) {
+                                BlockPos candidate = playerPos.add(dx, dy, dz);
+                                if (handlerWorld.getBlockEntity(candidate) instanceof AbstractFurnaceBlockEntity) {
+                                    foundPos = candidate;
+                                    break outer;
+                                }
+                            }
+                        }
+                    }
+
+                    if (foundPos == null) {
+                        FurnaceBoardLogger.info("Could not find furnace block entity near player.");
+                        return;
+                    }
+
+                    AbstractFurnaceBlockEntity furnaceBE =
+                            (AbstractFurnaceBlockEntity) handlerWorld.getBlockEntity(foundPos);
+                    if (furnaceBE == null) return;
+
+                    FurnaceBoardLogger.info("Found furnace at " + foundPos);
+                    recordFurnace(furnaceBE, foundPos, client.world.getRegistryKey());
+                }
+            }
+
+            // --- Periodic ETA recalculation ---
             tickCounter++;
             if (tickCounter < TICK_INTERVAL) return;
             tickCounter = 0;
@@ -142,12 +147,9 @@ public final class FurnaceTrackerManager {
                 BlockPos pos = entry.getKey();
                 FurnaceRecord oldRecord = entry.getValue();
 
-                // Only update furnaces in the current dimension
                 if (!oldRecord.dimension.equals(dimension)) continue;
 
-                // Try to get the live block entity from the world
                 if (!(world.getBlockEntity(pos) instanceof AbstractFurnaceBlockEntity furnaceBE)) {
-                    // Not loaded — keep existing record, don't update
                     continue;
                 }
 
@@ -156,7 +158,6 @@ public final class FurnaceTrackerManager {
                 FurnaceRecord newRecord = worldData.get(pos);
                 if (newRecord == null) continue;
 
-                // Detect DONE transition — fire notification once per transition
                 if (newRecord.state == FurnaceState.DONE && oldState != FurnaceState.DONE) {
                     if (!notifiedDone.contains(pos)) {
                         notifiedDone.add(pos);
@@ -164,7 +165,6 @@ public final class FurnaceTrackerManager {
                         FurnaceBoardLogger.info("Furnace DONE at " + pos);
                     }
                 } else if (newRecord.state != FurnaceState.DONE) {
-                    // Reset notification flag when furnace is no longer DONE
                     notifiedDone.remove(pos);
                 }
             }
@@ -175,36 +175,17 @@ public final class FurnaceTrackerManager {
     // Record creation
     // -------------------------------------------------------------------------
 
-    /**
-     * Reads current state from a live AbstractFurnaceBlockEntity and
-     * creates/updates the FurnaceRecord in worldData.
-     *
-     * Field names verified against Yarn 1.21.11+build.4:
-     *   burnTime, cookTime, cookTimeTotal — package-private in AbstractFurnaceBlockEntity.
-     *   Accessed here via PropertyDelegate indices from AbstractFurnaceScreenHandler,
-     *   which are synced to the client. This avoids needing direct field access.
-     *
-     * // UNTESTED — verify PropertyDelegate index mapping in 1.21.11
-     */
     private static void recordFurnace(
             AbstractFurnaceBlockEntity furnaceBE,
             BlockPos pos,
             RegistryKey<World> dimension
     ) {
-        // Field names verified in Yarn 1.21.11+build.4:
-        //   litTimeRemaining  (index 0) — was: burnTime
-        //   litTotalTime      (index 1) — was: fuelTime
-        //   cookingTimeSpent  (index 2) — was: cookTime
-        //   cookingTotalTime  (index 3) — was: cookTimeTotal
-        // Accessed via PropertyDelegate (synced to client, no direct field access needed)
         PropertyDelegate props = ((AbstractFurnaceBlockEntityAccessor) furnaceBE).getPropertyDelegate();
         int burnTime      = props.get(AbstractFurnaceBlockEntity.BURN_TIME_PROPERTY_INDEX);
         int cookTime      = props.get(AbstractFurnaceBlockEntity.COOK_TIME_PROPERTY_INDEX);
         int cookTimeTotal = props.get(AbstractFurnaceBlockEntity.COOK_TIME_TOTAL_PROPERTY_INDEX);
 
-        // Input slot is slot index 0 per AbstractFurnaceScreenHandler
-        ItemStack inputStack = furnaceBE.getStack(0);
-        // Output slot is slot index 2
+        ItemStack inputStack  = furnaceBE.getStack(0);
         ItemStack outputStack = furnaceBE.getStack(2);
 
         @Nullable Identifier inputItem = inputStack.isEmpty()
@@ -214,36 +195,19 @@ public final class FurnaceTrackerManager {
         FurnaceState state = computeState(inputStack, outputStack, burnTime, cookTime, cookTimeTotal);
 
         FurnaceRecord record = new FurnaceRecord(
-                pos,
-                dimension,
-                inputItem,
-                inputStack.getCount(),
-                cookTimeTotal,
-                cookTime,
-                burnTime,
-                state,
+                pos, dimension, inputItem, inputStack.getCount(),
+                cookTimeTotal, cookTime, burnTime, state,
                 System.currentTimeMillis()
         );
 
         worldData.put(pos, record);
         worldData.save();
+        FurnaceBoardLogger.info("Recorded furnace at " + pos + " state=" + state);
     }
 
-    /**
-     * Derives FurnaceState from raw furnace field values.
-     *
-     * Logic:
-     *   - Output has items → DONE
-     *   - Input empty → EMPTY
-     *   - Fuel present (burnTime > 0) → SMELTING
-     *   - No fuel → NO_FUEL
-     */
     private static FurnaceState computeState(
-            ItemStack input,
-            ItemStack output,
-            int burnTime,
-            int cookTime,
-            int cookTimeTotal
+            ItemStack input, ItemStack output,
+            int burnTime, int cookTime, int cookTimeTotal
     ) {
         if (!output.isEmpty()) return FurnaceState.DONE;
         if (input.isEmpty())   return FurnaceState.EMPTY;
