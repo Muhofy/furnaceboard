@@ -7,8 +7,8 @@ import dev.muhofy.furnaceboard.notification.FurnaceNotifier;
 import dev.muhofy.furnaceboard.tracker.FurnaceTrackerManager;
 import dev.muhofy.furnaceboard.util.FurnaceBoardLogger;
 import net.minecraft.block.entity.AbstractFurnaceBlockEntity;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.screen.ingame.AbstractFurnaceScreen;
-import net.minecraft.client.gui.screen.ingame.HandledScreen;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.item.ItemStack;
 import net.minecraft.registry.RegistryKey;
@@ -18,65 +18,57 @@ import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Injects into AbstractFurnaceScreen.handledScreenTick() to read furnace state
- * every screen tick — client-side only, no reflection, no casting issues.
- *
- * Uses getCookProgress(), getFuelProgress(), isBurning() public API from handler,
- * and finds BlockPos via world scan around player (only once on open).
+ * Injects into AbstractFurnaceScreen to read furnace state client-side.
+ * No @Shadow — uses only public API methods.
  */
 @Mixin(AbstractFurnaceScreen.class)
-public abstract class AbstractFurnaceScreenMixin<T extends AbstractFurnaceScreenHandler>
-        extends HandledScreen<T> {
+public class AbstractFurnaceScreenMixin {
 
-    protected AbstractFurnaceScreenMixin() {
-        super(null, null, null);
-    }
-
-    @Shadow
-    protected T handler;
-
-    /** Cached BlockPos — found once on screen open, reused every tick. */
+    @Unique
     private BlockPos furnaceboard$cachedPos = null;
 
     @Inject(method = "init", at = @At("RETURN"))
     private void furnaceboard$onInit(CallbackInfo ci) {
-        // Find furnace pos when screen opens
-        furnaceboard$cachedPos = findFurnacePos();
+        furnaceboard$cachedPos = furnaceboard$findFurnacePos();
         if (furnaceboard$cachedPos != null) {
-            FurnaceBoardLogger.info("Screen Mixin: furnace found at " + furnaceboard$cachedPos);
-            // Clear exclusion if player reopened — auto-track again
+            FurnaceBoardLogger.info("Furnace found at " + furnaceboard$cachedPos);
             FurnaceTrackerManager.clearExclusion(furnaceboard$cachedPos);
         }
     }
 
-    @Inject(method = "handledScreenTick", at = @At("RETURN"))
+    @Inject(method = "tick", at = @At("RETURN"))
     private void furnaceboard$onTick(CallbackInfo ci) {
         if (furnaceboard$cachedPos == null) return;
         if (FurnaceTrackerManager.isExcluded(furnaceboard$cachedPos)) return;
+
+        MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.world == null) return;
 
-        T handler = this.handler;
+        // Get handler via the screen itself — AbstractFurnaceScreen is the target
+        AbstractFurnaceScreen<?> self = (AbstractFurnaceScreen<?>) (Object) this;
+        AbstractFurnaceScreenHandler handler =
+                (AbstractFurnaceScreenHandler) self.getScreenHandler();
+
         float cookProgress = handler.getCookProgress();
         boolean burning    = handler.isBurning();
 
-        int cookTimeTotal = 200; // DEFAULT_COOK_TIME
+        int cookTimeTotal = 200;
         int cookTime      = Math.round(cookProgress * cookTimeTotal);
-        int burnTime      = burning ? 1 : 0; // we only need burning state
+        int burnTime      = burning ? 1 : 0;
 
         ItemStack inputStack  = handler.slots.get(0).getStack();
         ItemStack outputStack = handler.getOutputSlot().getStack();
 
-        @Nullable Identifier inputItem = inputStack.isEmpty()
-                ? null
+        @Nullable Identifier inputItem = inputStack.isEmpty() ? null
                 : inputStack.getItem().getRegistryEntry().registryKey().getValue();
 
-        FurnaceState state = computeState(inputStack, outputStack, burnTime);
+        FurnaceState state = furnaceboard$computeState(inputStack, outputStack, burnTime);
         RegistryKey<World> dimension = client.world.getRegistryKey();
 
         FurnaceBoardWorldData worldData = FurnaceTrackerManager.getWorldData();
@@ -85,8 +77,7 @@ public abstract class AbstractFurnaceScreenMixin<T extends AbstractFurnaceScreen
 
         FurnaceRecord record = new FurnaceRecord(
                 furnaceboard$cachedPos, dimension, inputItem, inputStack.getCount(),
-                cookTimeTotal, cookTime, burnTime, state,
-                System.currentTimeMillis()
+                cookTimeTotal, cookTime, burnTime, state, System.currentTimeMillis()
         );
         worldData.put(furnaceboard$cachedPos, record);
 
@@ -100,8 +91,10 @@ public abstract class AbstractFurnaceScreenMixin<T extends AbstractFurnaceScreen
         }
     }
 
+    @Unique
     @Nullable
-    private BlockPos findFurnacePos() {
+    private BlockPos furnaceboard$findFurnacePos() {
+        MinecraftClient client = MinecraftClient.getInstance();
         if (client == null || client.world == null || client.player == null) return null;
         ClientWorld world = client.world;
         BlockPos playerPos = client.player.getBlockPos();
@@ -118,7 +111,9 @@ public abstract class AbstractFurnaceScreenMixin<T extends AbstractFurnaceScreen
         return null;
     }
 
-    private static FurnaceState computeState(ItemStack input, ItemStack output, int burnTime) {
+    @Unique
+    private static FurnaceState furnaceboard$computeState(
+            ItemStack input, ItemStack output, int burnTime) {
         if (input.isEmpty() && !output.isEmpty()) return FurnaceState.DONE;
         if (input.isEmpty()) return FurnaceState.EMPTY;
         if (burnTime > 0)    return FurnaceState.SMELTING;
