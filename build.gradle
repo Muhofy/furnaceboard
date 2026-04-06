@@ -11,6 +11,7 @@ group = project.maven_group
 
 loom {
     mixin {
+        useLegacyMixinAp = true
         defaultRefmapName = "furnaceboard.refmap.json"
     }
 }

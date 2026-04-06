@@ -8,6 +8,7 @@ import dev.muhofy.furnaceboard.tracker.FurnaceTrackerManager;
 import dev.muhofy.furnaceboard.util.FurnaceBoardLogger;
 import net.minecraft.block.entity.AbstractFurnaceBlockEntity;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ingame.AbstractFurnaceScreen;
 import net.minecraft.client.world.ClientWorld;
 import net.minecraft.item.ItemStack;
@@ -42,8 +43,8 @@ public class AbstractFurnaceScreenMixin {
         }
     }
 
-    @Inject(method = "tick", at = @At("RETURN"))
-    private void furnaceboard$onTick(CallbackInfo ci) {
+    @Inject(method = "render", at = @At("HEAD"))
+    private void furnaceboard$onRender(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         if (furnaceboard$cachedPos == null) return;
         if (FurnaceTrackerManager.isExcluded(furnaceboard$cachedPos)) return;
 
