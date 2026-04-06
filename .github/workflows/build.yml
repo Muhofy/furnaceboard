@@ -33,9 +33,12 @@ jobs:
           path: build/libs/furnaceboard-*.jar
           if-no-files-found: error
 
+      - name: Extract and upload refmap from JAR
+        run: unzip -p build/libs/furnaceboard-*.jar furnaceboard.refmap.json > furnaceboard.refmap.json || echo "refmap not found in JAR"
+
       - name: Upload refmap
         uses: actions/upload-artifact@v4
         with:
           name: furnaceboard-refmap
-          path: build/resources/main/furnaceboard.refmap.json
+          path: furnaceboard.refmap.json
           if-no-files-found: warn

@@ -43,7 +43,10 @@ public class AbstractFurnaceScreenMixin {
         }
     }
 
-    @Inject(method = "render", at = @At("HEAD"))
+    @Inject(
+        method = "render(Lnet/minecraft/client/gui/DrawContext;IIF)V",
+        at = @At("HEAD")
+    )
     private void furnaceboard$onRender(DrawContext context, int mouseX, int mouseY, float delta, CallbackInfo ci) {
         if (furnaceboard$cachedPos == null) return;
         if (FurnaceTrackerManager.isExcluded(furnaceboard$cachedPos)) return;
