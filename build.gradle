@@ -9,6 +9,12 @@ plugins {
 version = project.mod_version
 group = project.maven_group
 
+loom {
+    mixin {
+        defaultRefmapName = "furnaceboard.refmap.json"
+    }
+}
+
 base {
     archivesName = project.archives_base_name
 }
