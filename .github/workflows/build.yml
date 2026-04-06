@@ -32,3 +32,10 @@ jobs:
           name: furnaceboard
           path: build/libs/furnaceboard-*.jar
           if-no-files-found: error
+
+      - name: Upload refmap
+        uses: actions/upload-artifact@v4
+        with:
+          name: furnaceboard-refmap
+          path: build/resources/main/furnaceboard.refmap.json
+          if-no-files-found: warn
